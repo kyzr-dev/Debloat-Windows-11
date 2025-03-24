@@ -1,3 +1,19 @@
+param (
+	$exPol = $null
+)
+
+# Confirm before continuing (
+
+Add-Type -AssemblyName System.Windows.Forms
+$confirmContinue = [System.Windows.Forms.MessageBox]::Show("Windows Debloat will automatically uninstall several apps and Windows components without prompt for confirmation? `n`nContinue?",'KYZR - Windows Debloat','YesNo','Question')
+
+Switch ($confirmContinue) {
+	'Yes' { continue }
+	'No' { exit }
+}
+
+# )
+
 # Set up logging (
 $logDir = "$PSScriptRoot\Logs\$env:COMPUTERNAME"
 
@@ -8,6 +24,7 @@ $logFiles = @(
 	$groundworkLog = "Groundwork.log";
 	$shredOneDriveLog = "ShredOneDrive.log"
 )
+
 
 if (-not (Test-Path $logDir)){
 	New-Item -Path $logDir -ItemType "Directory" -Force
@@ -294,19 +311,17 @@ $scripts = @(
 } *>&1 >> "$logDir\$userRegLog";
 # )
 
+
+if (-not({ Get-ExecutionPolicy } -eq $exPol)){
+	schtasks /create /tn "Fix ExecutionPolicy" /sc onlogon /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command Set-ExecutionPolicy $exPol -Scope LocalMachine -Force ; schtasks /delete /tn 'Fix ExecutionPolicy' /f" /ru SYSTEM /rl highest /f
+	
+}
+
 # Prompt for reboot (
-$rebootPrompt = New-Object -comobject wscript.shell
-$timeout = 10
-$answer = $rebootPrompt.Popup("Please restart your PC as soon as possible or risk Windows reinstalling its bloatware. Proceed?", $timeout, "City of Overland", 4096 + 48 + 1)
+$promptReboot = [System.Windows.Forms.MessageBox]::Show("Windows Content Delivery Manager has been queued for removal, but will not be fully removed until next restart. `n`nReboot now?",'KYZR - Windows Debloat','YesNo','Question')
 
-Switch ($answer) {
-    # Accepted #
-    { $answer -eq 1 } { Start-Process cmd.exe -ArgumentList "/c shutdown /r /t 0" -Verb RunAs }
-
-    # Cancelled #
-    { $answer -eq 2 } { Exit 0 }
-
-    # Timeout #
-    { $answer -eq -1 } { Start-Process cmd.exe -ArgumentList "/c shutdown /r /t 3" -Verb RunAs }
+Switch ($promptReboot) {
+	'Yes' { Start-Process cmd.exe -ArgumentList "/c shutdown /r /t 1" -Verb RunAs }
+	'No' { [System.Windows.MessageBox]::Show("Content Delivery Manager will attempt to reinstall bloatware and other components that were removed by this script. `n`nConsider rebooting ASAP or risk debloat being undone.",'KYZR - Windows Debloat','OK','Information') }
 }
 # )
