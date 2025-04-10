@@ -1,0 +1,1 @@
+Import-Module -DisableNameChecking "$PSScriptRoot\modules\KYZR.PowerShell\KYZR.PowerShell.psm1" -ArgumentList @{ Instance = $PSCommandPath }

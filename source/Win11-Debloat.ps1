@@ -1,48 +1,44 @@
 param (
-	$exPol = $null
+	$exPol = [Microsoft.PowerShell.ExecutionPolicy]::RemoteSigned
 )
 
-# Confirm before continuing (
+# Add custom module to runtime environment (
+Import-Module -DisableNameChecking "$PSScriptRoot\modules\KYZR.PowerShell\KYZR.PowerShell.psm1" -ArgumentList @{ Instance = $PSCommandPath }
 
-Add-Type -AssemblyName System.Windows.Forms
-$confirmContinue = [System.Windows.Forms.MessageBox]::Show("Windows Debloat will automatically uninstall several apps and Windows components without prompt for confirmation? `n`nContinue?",'KYZR - Windows Debloat','YesNo','Question')
+# )
 
+$confirmMessageParameter = @{
+	Message = "This tool will automatically uninstall several apps and Windows components with no other prompt for confirmation after this warning. `n`nContinue?"
+	WindowTitle = 'KYZR - Windows Debloat'
+	Buttons = "YesNo"
+	Icon = 'Question'
+}
+
+$confirmContinue = New-MessageBox @confirmMessageParameter
 Switch ($confirmContinue) {
-	'Yes' { continue }
 	'No' { exit }
 }
 
 # )
 
 # Set up logging (
-$logDir = "$PSScriptRoot\Logs\$env:COMPUTERNAME"
+$rmvLog = "RemovePackages.log";
+$edgeLog = "MakeEdgeUninstallable.log";
+$userRegLog = "UserRegistry.log";
+$groundworkLog = "Groundwork.log";
+$shredOneDriveLog = "ShredOneDrive.log"
 
 $logFiles = @(
-	$rmvLog = "RemovePackages.log";
-	$edgeLog = "MakeEdgeUninstallable.log";
-	$userRegLog = "UserRegistry.log";
-	$groundworkLog = "Groundwork.log";
-	$shredOneDriveLog = "ShredOneDrive.log"
+    $rmvLog;
+    $edgeLog;
+    $userRegLog;
+    $groundworkLog;
+    $shredOneDriveLog
 )
 
+Initialize-Logging -FileNames $logFiles
+$logDir = Get-LogDirectory
 
-if (-not (Test-Path $logDir)){
-	New-Item -Path $logDir -ItemType "Directory" -Force
-}
-
-foreach($log in $logFiles){
-	New-Item -Path $logDir -Name $log -ItemType "File" -Force
-}
-
-function Get-Timestamp{
-    $ts = (Get-Date).ToString("HH:mm:ss")
-    return $ts
-}
-
-# )
-
-# Add custom module to runtime environment (
-Import-Module -DisableNameChecking $PSScriptRoot\modules\Hijack.psm1
 # )
 
 # Some miscellaneous groundwork before debloat (
@@ -87,8 +83,15 @@ $scripts = @(
 	[float] $complete = 0;
 	[float] $increment = 100 / $scripts.Count;
 	foreach( $script in $scripts ) {
-		Write-Progress -Activity 'Preparing Windows to ensure debloat can succeed..' -PercentComplete $complete;
-		& $script;
+		$scriptname = ([string]$script).TrimStart()
+		$trimmed = ($scriptname).Trim("`n`r")
+		Write-Host "Running some prep scripts."
+		Write-Progress -Activity "Currently running: $trimmed" -PercentComplete $complete;
+		try{
+			& $script
+		} catch {
+		
+		}
 		$complete += $increment;
 	}
 } *>&1 >> "$logDir\$groundworkLog";
@@ -110,7 +113,7 @@ $scripts = @(
 
 	Write-Output "[$(Get-Timestamp)] Disabling OneDrive via Group Policy.."
 	New-Item -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\OneDrive" -ItemType Directory -Force 
-	sp "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\OneDrive" "DisableFileSyncNGSC" 1
+	Set-ItemProperty "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\OneDrive" "DisableFileSyncNGSC" 1
 
 	Write-Output "[$(Get-Timestamp)] Removing OneDrive leftovers trash"
 	Remove-Item -Path "$env:LOCALAPPDATA\Microsoft\OneDrive" -Recurse -Force -ErrorAction SilentlyContinue 
@@ -120,9 +123,9 @@ $scripts = @(
 	Write-Output "[$(Get-Timestamp)] Removing Onedrive from explorer sidebar.."
 	New-PSDrive -PSProvider "Registry" -Root "HKEY_CLASSES_ROOT" -Name "HKCR"
 	mkdir -Force "HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}"
-	sp "HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" "System.IsPinnedToNameSpaceTree" 0
+	Set-ItemProperty "HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" "System.IsPinnedToNameSpaceTree" 0
 	mkdir -Force "HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}"
-	sp "HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" "System.IsPinnedToNameSpaceTree" 0
+	Set-ItemProperty "HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" "System.IsPinnedToNameSpaceTree" 0
 	Remove-PSDrive "HKCR"
 
 	Write-Output "[$(Get-Timestamp)] Removing run option for new users.."
@@ -140,121 +143,111 @@ $scripts = @(
 	Start-Sleep 5
 
 	Write-Output "[$(Get-Timestamp)] Removing additional OneDrive leftovers"
-	foreach ($item in (ls "$env:WINDIR\WinSxS\*onedrive*")) {
-		Hijack-Path $item.FullName
+	foreach ($item in (Get-ChildItem "$env:WINDIR\WinSxS\*onedrive*")) {
+		Write-Output "Attempting to Hijack $item"
+		Hijack-Path -FilePath $item.FullName -RemoveACL $true
 		Remove-Item -Path $item.FullName -Recurse -Force -ErrorAction SilentlyContinue
 	}
 } *>&1 >> "$logDir\$shredOneDriveLog"
 # ) 
 
 # Remove specified packages from Windows if installed (
-$selectors = @(
-	'Microsoft.Microsoft3DViewer';
-	'Microsoft.BingSearch';
-	'Microsoft.Copilot';
-	'Clipchamp.Clipchamp';
-	'Microsoft.549981C3F5F10';
-	'Microsoft.Windows.DevHome';
-	'MicrosoftCorporationII.MicrosoftFamily';
-	'Microsoft.Getstarted';
-	'microsoft.windowscommunicationsapps';
-	'Microsoft.MixedReality.Portal';
-	'Microsoft.BingNews';
-	'Microsoft.MicrosoftOfficeHub';
-	'Microsoft.Office.OneNote';
-	'Microsoft.OutlookForWindows';
-	'Microsoft.People';
-	'Microsoft.SkypeApp';
-	'Microsoft.MicrosoftSolitaireCollection';
-	'MicrosoftTeams';
-	'MSTeams';
-	'Microsoft.Todos';
-	'Microsoft.Wallet';
-	'Microsoft.BingWeather';
-	'Microsoft.Xbox.TCUI';
-	'Microsoft.XboxApp';
-	'Microsoft.XboxGameOverlay';
-	'Microsoft.XboxGamingOverlay';
-	'Microsoft.XboxIdentityProvider';
-	'Microsoft.XboxSpeechToTextOverlay';
-	'Microsoft.GamingApp';
-	'Microsoft.YourPhone';
-	'Microsoft.ZuneMusic';
-	'Microsoft.ZuneVideo';
-);
-$getCommand = {
-  Get-AppxProvisionedPackage -Online;
-};
-$filterCommand = {
-  $_.DisplayName -eq $selector;
-};
-$removeCommand = {
-  [CmdletBinding()]
-  param(
-    [Parameter( Mandatory, ValueFromPipeline )]
-    $InputObject
-  );
-  process {
-    $InputObject | Remove-AppxProvisionedPackage -AllUsers -Online -ErrorAction 'Continue';
-  }
-};
+function Remove-BloatwareApps {
+	[CmdletBinding()]
+	param (
+		[Parameter()]
+		[string[]]$AppPatterns = @(
+			'Microsoft.Microsoft3DViewer';
+			'Microsoft.BingSearch';
+			'Microsoft.Copilot';
+			'Clipchamp.Clipchamp';
+			'Microsoft.549981C3F5F10';
+			'Microsoft.Windows.DevHome';
+			'MicrosoftCorporationII.MicrosoftFamily';
+			'Microsoft.Getstarted';
+			'microsoft.windowscommunicationsapps';
+			'Microsoft.MixedReality.Portal';
+			'Microsoft.BingNews';
+			'Microsoft.MicrosoftOfficeHub';
+			'Microsoft.Office.OneNote';
+			'Microsoft.OutlookForWindows';
+			'Microsoft.People';
+			'Microsoft.SkypeApp';
+			'Microsoft.MicrosoftSolitaireCollection';
+			'MicrosoftTeams';
+			'MSTeams';
+			'Microsoft.Todos';
+			'Microsoft.Wallet';
+			'Microsoft.BingWeather';
+			'Microsoft.Xbox.TCUI';
+			'Microsoft.XboxApp';
+			'Microsoft.XboxGameOverlay';
+			'Microsoft.XboxGamingOverlay';
+			'Microsoft.XboxIdentityProvider';
+			'Microsoft.XboxSpeechToTextOverlay';
+			'Microsoft.GamingApp';
+			'Microsoft.YourPhone';
+			'Microsoft.ZuneMusic';
+			'Microsoft.ZuneVideo';
+			'Microsoft.Whiteboard';
+			'Microsoft.MicrosoftOfficeHub';
+			'Microsoft.Windows.Ai.Copilot.Provider';
+			'Copilot';
+	
+			# Customized / Targeted Packages
+			'E0469640.LenovoUtility';                      
+			'E0469640.LenovoSmartCommunication';             
+			'E046963F.LenovoCompanion';   
+		)
 
-function Remove-Copilot {
-    $COPILOT = Get-AppxPackage | Where-Object {$_.Name -match "Copilot"}
-    $COPILOT | Remove-AppxProvisionedPackage -AllUsers -Online -ErrorAction 'Continue'
-    $COPILOT | Remove-AppxPackage
-    Get-AppxPackage -Name 'Microsoft.Windows.Ai.Copilot.Provider' | Remove-AppxPackage
+	)
+
+	# Ensure we have admin rights
+	if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+		Write-Error "ERROR: You must run this script as Administrator."
+		return
+	}
+
+	Write-Output "[$(Get-Timestamp)] Starting bloatware removal..."
+
+	# Cache installed and provisioned apps for performance
+	$InstalledApps = Get-AppxPackage -AllUsers
+	$ProvisionedApps = Get-AppxProvisionedPackage -Online
+
+	foreach ($Pattern in $AppPatterns) {
+		# Find matches for installed apps
+		$MatchingInstalledApps = $InstalledApps | Where-Object { $_.Name -like $Pattern }
+		foreach ($App in $MatchingInstalledApps) {
+			try {
+				Write-Output "[$(Get-Timestamp)] Removing installed app: $($App.Name)"
+				$App | Remove-AppxPackage -AllUsers -ErrorAction Stop
+			}
+			catch {
+				Write-Warning "[$(Get-Timestamp)] Failed to remove installed app: $($App.Name) - $($_.Exception.Message)"
+				"[$(Get-Timestamp)] ERROR removing installed app: $($App.Name) - $($_.Exception.Message)"
+			}
+		}
+
+		# Find matches for provisioned apps
+		$MatchingProvisionedApps = $ProvisionedApps | Where-Object { $_.DisplayName -like $Pattern }
+		foreach ($ProvApp in $MatchingProvisionedApps) {
+			try {
+				Write-Output "[$(Get-Timestamp)] Removing provisioned app: $($ProvApp.DisplayName)"
+				Remove-AppxProvisionedPackage -Online -PackageName $ProvApp.PackageName -ErrorAction Stop
+			}
+			catch {
+				Write-Warning "[$(Get-Timestamp)] Failed to remove provisioned app: $($ProvApp.DisplayName) - $($_.Exception.Message)"
+				"[$(Get-Timestamp)] ERROR removing provisioned app: $($ProvApp.DisplayName) - $($_.Exception.Message)"
+			}
+		}
+	}
+
+	Write-Output "[$(Get-Timestamp)] Bloatware removal completed."
 }
 
-$type = 'Package';
-
 &{
-	$installed = & $getCommand;
-	foreach( $selector in $selectors ) {
-		$result = [ordered] @{
-			Selector = $selector;
-		};
-		$found = $installed | Where-Object -FilterScript $filterCommand;
-		if( $found ) {
-			$result.Output = $found | & $removeCommand;
-			if( $? ) {
-				$result.Message = "$type removed.";
-			} else {
-				$result.Message = "$type not removed.";
-				$result.Error = $Error[0];
-			}
-		} else {
-			$result.Message = "$type not installed.";
-		}
-		$result | ConvertTo-Json -Depth 3 -Compress;
-	}
-	
-	& Remove-Copilot
-	
+    Remove-BloatwareApps
 } *>&1 >> "$logDir\$rmvLog"
-# )
-
-# Make Microsoft Edge uninstallable (
-$ErrorActionPreference = 'Stop';
-& {
-	$isrPolicySet = 'C:\Windows\System32\IntegratedServicesRegionPolicySet.json'
-	Hijack-Path -FilePath $isrPolicySet
-	try {
-		$params = @{
-			LiteralPath = $isrPolicySet;
-			Encoding = 'Utf8';
-		};
-		$o = Get-Content @params | ConvertFrom-Json;
-		$o.policies | ForEach-Object -Process {
-			if( $_.guid -eq '{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6}' ) {
-				$_.defaultState = 'enabled';
-			}
-		};
-		$o | ConvertTo-Json -Depth 9 | Out-File @params;
-	} catch {
-		$_;
-	}
-} *>&1 >> "$logDir\$edgeLog";
 # )
 
 # Make necessary changes to user's reg hive (
@@ -313,15 +306,32 @@ $scripts = @(
 
 
 if (-not({ Get-ExecutionPolicy } -eq $exPol)){
-	schtasks /create /tn "Fix ExecutionPolicy" /sc onlogon /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command Set-ExecutionPolicy $exPol -Scope LocalMachine -Force ; schtasks /delete /tn 'Fix ExecutionPolicy' /f" /ru SYSTEM /rl highest /f
+	schtasks /create /tn "Fix ExecutionPolicy" /sc onlogon /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command Set-ExecutionPolicy $exPol -Scope CurrentUser -Force ; schtasks /delete /tn 'Fix ExecutionPolicy' /f" /ru SYSTEM /rl highest /f
 	
 }
 
 # Prompt for reboot (
-$promptReboot = [System.Windows.Forms.MessageBox]::Show("Windows Content Delivery Manager has been queued for removal, but will not be fully removed until next restart. `n`nReboot now?",'KYZR - Windows Debloat','YesNo','Question')
+$rebootMessageParameter = @{
+	Message = "Windows Content Delivery Manager has been queued for removal, but will not be fully removed until next restart. `n`nReboot now?"
+	WindowTitle = 'KYZR - Windows Debloat'
+	Buttons = "YesNo"
+	Icon = 'Question'
+}
+
+$doubledownParameter = @{
+    Message = "Content Delivery Manager will attempt to reinstall bloatware and other components that were removed by this script. `n`nConsider rebooting ASAP or risk debloat being undone."
+    WindowTitle = 'KYZR - Windows Debloat'
+	Buttons = "Ok"
+	Icon = 'Information'
+}
+
+
+$promptReboot = New-MessageBox @rebootMessageParameter
 
 Switch ($promptReboot) {
-	'Yes' { Start-Process cmd.exe -ArgumentList "/c shutdown /r /t 1" -Verb RunAs }
-	'No' { [System.Windows.MessageBox]::Show("Content Delivery Manager will attempt to reinstall bloatware and other components that were removed by this script. `n`nConsider rebooting ASAP or risk debloat being undone.",'KYZR - Windows Debloat','OK','Information') }
+	'Yes' { Start-Process cmd.exe -ArgumentList "/c shutdown /r /t 2" -Verb RunAs }
+	'No' { New-MessageBox @doubledownParameter}
 }
+
+exit
 # )
