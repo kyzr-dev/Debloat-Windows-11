@@ -1,4 +1,4 @@
-function Initialize-Logging {
+function New-LogFile {
 	[CmdletBinding()]
 	param (
 		[parameter(Mandatory=$false)][Array]$FileNames

@@ -3,18 +3,15 @@ function Request-Elevation {
         [parameter(Mandatory=$false)][string]$Path
     )
 
-    $Elevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    $ERR_INVALID_PATH = "Could not open `'$Path`' with elevated privileges because the path does not exist."
-
-    if ($Elevated){
+    if (Confirm-Elevation){
         $Host.UI.RawUI.WindowTitle = "Windows PowerShell - KYZR (Elevated)"
         return 
         } else {
             if ($Path){
                 if (-not (Test-Path $Path)){
-                    throw $ERR_INVALID_PATH
+                    Assert-Error -Code ERR_INVALID_PATH -Params @{ Path = $Path } -ExceptionType ([System.IO.FileNotFoundException])
                 } else {
-                    Start-Process -Verb RunAs PowerShell -ArgumentList "-NoExit -ExecutionPolicy Bypass -File $Path"
+                    Start-Process -Verb RunAs PowerShell -ArgumentList "-NoExit -ExecutionPolicy Bypass -File $Path -ArgumentList $args"
                 }
             } else {
                 Start-Process -Verb RunAs PowerShell

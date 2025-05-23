@@ -1,11 +1,12 @@
-param (
-	$exPol = [Microsoft.PowerShell.ExecutionPolicy]::RemoteSigned
-)
-
 # Add custom module to runtime environment (
 Import-Module -DisableNameChecking "$PSScriptRoot\modules\KYZR.PowerShell\KYZR.PowerShell.psm1" -ArgumentList @{ Instance = $PSCommandPath }
 
 # )
+
+if (-not (Confirm-Elevation)){
+	Request-Elevation -Path $PSCommandPath
+	exit
+}
 
 $confirmMessageParameter = @{
 	Message = "This tool will automatically uninstall several apps and Windows components with no other prompt for confirmation after this warning. `n`nContinue?"
@@ -57,6 +58,9 @@ $scripts = @(
 	};
 	{
 		reg.exe add "HKLM\Software\Policies\Microsoft\Edge" /v HubsSidebarEnabled /t REG_DWORD /d 0 /f;
+	};
+	{
+		reg.exe add "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge" /v NoRemove /t REG_DWORD /d 0 /f;
 	};
 	{
 		reg.exe add "HKLM\Software\Policies\Microsoft\Edge" /v HideFirstRunExperience /t REG_DWORD /d 1 /f;
@@ -152,99 +156,6 @@ $scripts = @(
 # ) 
 
 # Remove specified packages from Windows if installed (
-function Remove-BloatwareApps {
-	[CmdletBinding()]
-	param (
-		[Parameter()]
-		[string[]]$AppPatterns = @(
-			'Microsoft.Microsoft3DViewer';
-			'Microsoft.BingSearch';
-			'Microsoft.Copilot';
-			'Clipchamp.Clipchamp';
-			'Microsoft.549981C3F5F10';
-			'Microsoft.Windows.DevHome';
-			'MicrosoftCorporationII.MicrosoftFamily';
-			'Microsoft.Getstarted';
-			'microsoft.windowscommunicationsapps';
-			'Microsoft.MixedReality.Portal';
-			'Microsoft.BingNews';
-			'Microsoft.MicrosoftOfficeHub';
-			'Microsoft.Office.OneNote';
-			'Microsoft.OutlookForWindows';
-			'Microsoft.People';
-			'Microsoft.SkypeApp';
-			'Microsoft.MicrosoftSolitaireCollection';
-			'MicrosoftTeams';
-			'MSTeams';
-			'Microsoft.Todos';
-			'Microsoft.Wallet';
-			'Microsoft.BingWeather';
-			'Microsoft.Xbox.TCUI';
-			'Microsoft.XboxApp';
-			'Microsoft.XboxGameOverlay';
-			'Microsoft.XboxGamingOverlay';
-			'Microsoft.XboxIdentityProvider';
-			'Microsoft.XboxSpeechToTextOverlay';
-			'Microsoft.GamingApp';
-			'Microsoft.YourPhone';
-			'Microsoft.ZuneMusic';
-			'Microsoft.ZuneVideo';
-			'Microsoft.Whiteboard';
-			'Microsoft.MicrosoftOfficeHub';
-			'Microsoft.Windows.Ai.Copilot.Provider';
-			'Copilot';
-	
-			# Customized / Targeted Packages
-			'E0469640.LenovoUtility';                      
-			'E0469640.LenovoSmartCommunication';             
-			'E046963F.LenovoCompanion';   
-		)
-
-	)
-
-	# Ensure we have admin rights
-	if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-		Write-Error "ERROR: You must run this script as Administrator."
-		return
-	}
-
-	Write-Output "[$(Get-Timestamp)] Starting bloatware removal..."
-
-	# Cache installed and provisioned apps for performance
-	$InstalledApps = Get-AppxPackage -AllUsers
-	$ProvisionedApps = Get-AppxProvisionedPackage -Online
-
-	foreach ($Pattern in $AppPatterns) {
-		# Find matches for installed apps
-		$MatchingInstalledApps = $InstalledApps | Where-Object { $_.Name -like $Pattern }
-		foreach ($App in $MatchingInstalledApps) {
-			try {
-				Write-Output "[$(Get-Timestamp)] Removing installed app: $($App.Name)"
-				$App | Remove-AppxPackage -AllUsers -ErrorAction Stop
-			}
-			catch {
-				Write-Warning "[$(Get-Timestamp)] Failed to remove installed app: $($App.Name) - $($_.Exception.Message)"
-				"[$(Get-Timestamp)] ERROR removing installed app: $($App.Name) - $($_.Exception.Message)"
-			}
-		}
-
-		# Find matches for provisioned apps
-		$MatchingProvisionedApps = $ProvisionedApps | Where-Object { $_.DisplayName -like $Pattern }
-		foreach ($ProvApp in $MatchingProvisionedApps) {
-			try {
-				Write-Output "[$(Get-Timestamp)] Removing provisioned app: $($ProvApp.DisplayName)"
-				Remove-AppxProvisionedPackage -Online -PackageName $ProvApp.PackageName -ErrorAction Stop
-			}
-			catch {
-				Write-Warning "[$(Get-Timestamp)] Failed to remove provisioned app: $($ProvApp.DisplayName) - $($_.Exception.Message)"
-				"[$(Get-Timestamp)] ERROR removing provisioned app: $($ProvApp.DisplayName) - $($_.Exception.Message)"
-			}
-		}
-	}
-
-	Write-Output "[$(Get-Timestamp)] Bloatware removal completed."
-}
-
 &{
     Remove-BloatwareApps
 } *>&1 >> "$logDir\$rmvLog"
@@ -303,12 +214,6 @@ $scripts = @(
 	}
 } *>&1 >> "$logDir\$userRegLog";
 # )
-
-
-if (-not({ Get-ExecutionPolicy } -eq $exPol)){
-	schtasks /create /tn "Fix ExecutionPolicy" /sc onlogon /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command Set-ExecutionPolicy $exPol -Scope CurrentUser -Force ; schtasks /delete /tn 'Fix ExecutionPolicy' /f" /ru SYSTEM /rl highest /f
-	
-}
 
 # Prompt for reboot (
 $rebootMessageParameter = @{

@@ -1,8 +1,7 @@
 function Get-LogDirectory {
-	if ($null -eq $Arguments.LogDirectory){
-		throw $ErrorLib.ERR_NULL_LOG_DIR
+	if ($null -eq $Config.CurrentLogDir){
+		Assert-Error -Code ERR_VARIABLE_NULL -Params @{Variable="Config.CurrentLogDir"} -ExceptionType ([System.IO.IOException])
 	} else {
-		return $Arguments.LogDirectory
+		return $Config.CurrentLogDir
 	}
 }
-

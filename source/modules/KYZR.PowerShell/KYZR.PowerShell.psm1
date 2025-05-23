@@ -65,19 +65,20 @@ if ($functionsAdded -or $functionsRemoved -or $aliasesAdded -or $aliasesRemoved 
     }
 }
 
-if ($($Arguments.Instance)){ # If the module was imported by a script, and made aware of its filepath
+if ($($Arguments.Instance)){ # If the module was imported by a script, and made aware of its filepath. The instance's information is used to create a log folder:
     $instance = Get-Item $($Arguments.Instance)
-    $dir = $instance.Directory
+    try { (Test-Path $instance.Directory.Parent) | Out-Null ; $logDir = $instance.Directory.Parent.FullName } catch { $logDir = $instance.DirectoryName }
     $fileName = $instance.Name
-    $segments = @($dir, "KYZR.Logs", $env:COMPUTERNAME, $fileName)
+    $segments = @($logDir, "KYZR.Logs", $env:COMPUTERNAME, $fileName)
     $fullPath = $segments -join $directorySeparator
+	$fullLogPath = $fullPath.replace(".ps1", "")
     if (-not ($($Arguments.LogDirectory))){   # If no log directory was defined during import.
-        $Config.CurrentLogDir = $fullPath     # Define the default location for potential log folder. Will not be created until 'Initialize-Logging' is called.
+        $Config.CurrentLogDir = $fullLogPath # Define the default location for potential log folder. Will not be created until 'New-LogFile' is called.
         Write-Host "`nNo log path was defined during import. Setting log directory to default path: $($Config.CurrentLogDir)`n"
     } else { # A path was passed to the module during import.
         Write-Host "`nA log path was defined during import. Setting log directory to defined path: $($Arguments.LogDirectory)`n"
         Set-LogDirectory -Path $($Arguments.LogDirectory) # Define log directory to the path that was passed during import.
-        Initialize-Logging -FileNames $($Arguments.LogFiles) # If a log directory was manually set during import, may as well create the folder automatically.
+        New-LogFile -FileNames $($Arguments.LogFiles) # If a log directory was manually set during import, may as well create the folder automatically.
 
     }
 } else { Write-Host "No Instance" }

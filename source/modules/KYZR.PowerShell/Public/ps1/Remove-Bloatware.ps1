@@ -49,8 +49,6 @@ function Remove-Bloatware{
         $AppPatterns = $PackageList
       }
 
-	Request-Elevation -Path $PSCommandPath
-
 	Write-Output "[$(Get-Timestamp)] Starting bloatware removal..."
 
 	# Cache installed and provisioned apps for performance
