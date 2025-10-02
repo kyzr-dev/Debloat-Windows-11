@@ -19,3 +19,5 @@ function New-MessageBox {
 	
 	return [System.Windows.Forms.MessageBox]::Show($form, $Message, $WindowTitle, $Buttons, $Icon)
 }
+
+
