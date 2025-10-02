@@ -5,11 +5,11 @@ Removes dozens of bloatware packages and disables some content delivery systems 
 Shoutout to Creosynth for mentioning me in their "Open source Windows tweakers" discussion threads for the inspiration to revive this project.
 
 INSTRUCTIONS FOR USE:
-	- Download
-	- Open folder
-	- Run the runner ('run.cmd')
-	- Wait
-	- Reboot when prompted
+   - Download
+   - Open folder
+   - Run the runner ('run.cmd')
+   - Wait
+   - Reboot when prompted
 
 Log file output to "C:\Logs\debloat.log"
 	
