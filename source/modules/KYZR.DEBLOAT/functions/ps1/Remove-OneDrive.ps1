@@ -1,9 +1,7 @@
 function Remove-OneDrive {
 
-    Write-Timestamp "Removing OneDrive.."
+    Write-Timestamp "Purging OneDrive.."
     $ErrorActionPreference = 'SilentlyContinue'
-
-    # $explorerStopped = $false
 
     try {
 
@@ -41,10 +39,12 @@ function Remove-OneDrive {
 
         Remove-Item -Path "$env:USERPROFILE\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk" -Recurse -Force 
 
-        # if ($explorerStopped){
-        #     Start-Process "explorer.exe"
-        #     Start-Sleep 3
-        # }
+        # Restart Windows Explorer..
+        if (Get-Process explorer -ErrorAction SilentlyContinue) {
+            Stop-Process -Name explorer -Force
+        }
+
+        Start-Sleep -Seconds 2   # Allow time for Windows to auto-restart Explorer.exe
 
     }
 

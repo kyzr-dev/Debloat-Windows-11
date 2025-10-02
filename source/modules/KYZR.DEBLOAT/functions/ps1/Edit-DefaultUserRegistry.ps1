@@ -1,6 +1,6 @@
 function Edit-DefaultUserRegistry {
 
-    Write-Timestamp "Beginning registry changes.."
+    Write-Timestamp "Ensuring registry changes persist to all future user accounts.."
 
     $ErrorActionPreference = 'Stop'
     $defHive = "$env:SystemDrive\Users\Default\NTUSER.DAT"
