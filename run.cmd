@@ -12,7 +12,7 @@ if %errorlevel% neq 0 (
   exit /b
 )
 
-rem --- Path to the PS1 next to this .cmd ---
+rem --- Path to the main runner ---
 set "script=%~dp0source/Start-Windows11Debloat.ps1"
 
 rem --- Parse args for 'unattended' (accept: unattended, /unattended, --unattended, unattended=1/true) ---

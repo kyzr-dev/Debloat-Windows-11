@@ -3,6 +3,8 @@ function Invoke-RegistryPolicy {
     Write-Timestamp "Applying registry policy.."
 
     try {
+		
+		Set-ItemProperty -LiteralPath 'Registry::HKCU\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -Type 'DWord' -Value 0
 
         Write-Timestamp "Removing DevHome update scheduler.."
         Remove-Item -LiteralPath 'Registry::HKLM\Software\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\DevHomeUpdate' -Force -ErrorAction SilentlyContinue
@@ -33,8 +35,7 @@ function Invoke-RegistryPolicy {
 
         Write-Timestamp "Disabling local network content fetching.."
 		reg add "HKLM\Software\Policies\Microsoft\Windows\CloudContent" /v DisableWindowsConsumerFeatures /t REG_DWORD /d 1 /f
-    
-        
+	  
         $tasks = @(
             '\Microsoft\Windows\CloudExperienceHost\CreateObjectTask',
             '\Microsoft\Windows\Shell\FamilySafetyMonitor'

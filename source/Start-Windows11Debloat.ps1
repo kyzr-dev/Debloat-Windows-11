@@ -14,19 +14,31 @@ if (-not $Unattended){
 	WindowTitle = 'KYZR - Windows Debloat'
 	Buttons = "YesNo"
 	Icon = 'Question'
+
 }
 
     $confirmContinue = New-MessageBox @confirmMessageParameter
-    switch ($confirmContinue) {
-        'No' { exit }
+    if (-not $confirmContinue){
+        exit -1
     }
 
 }
 
 # Logging init
-$logDir = 'C:\Logs'; if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+[string]$Root                       = $PSScriptRoot
+[string]$LogRoot                    = $null
+[string]$LogPath                    = $null
 
-Start-Transcript -Path "$logDir\debloat.log" -Append
+function Initialize-Logging {
+    $script:LogRoot = Join-Path $script:Root "logs"
+    New-Item -ItemType Directory -Force -Path $script:LogRoot | Out-Null
+
+    $script:LogPath = Join-Path $script:LogRoot ("{0}-{1:yyyy-MMdd-HHmmss}.log" -f $env:COMPUTERNAME, (Get-Date))
+}
+
+Initialize-Logging
+
+Start-Transcript -Path "$LogRoot\debloat.log" -Append
 Write-Timestamp "Starting.."
 
 # Some miscellaneous groundwork before debloat 
@@ -48,7 +60,7 @@ Stop-Transcript
 if (-not $Unattended){
 
     $rebootMessageParameter = @{
-        Message = "Debloat complete (see log file for details: 'C:\Logs\debloat.log').`n`nWindows Content Delivery Manager has been queued for removal, but will not be fully removed until next restart. `n`nReboot now?"
+        Message = "Debloat complete (log file output to: '$LogPath').`n`nWindows Content Delivery Manager has been queued for removal, but will not be fully removed until next restart. `n`nReboot now?"
         WindowTitle = 'KYZR - Windows Debloat'
         Buttons = "YesNo"
         Icon = 'Question'
@@ -72,8 +84,8 @@ if (-not $Unattended){
 
 
 if ((-not $Unattended) -and (-not $agreedReboot -eq 'Yes')){ 
-    if ( Test-Path "C:\Logs" ) { Start-Process explorer -ArgumentList "C:\Logs" } 
+    if ( Test-Path $LogPath ) { Start-Process explorer -ArgumentList "$LogRoot" } 
 }
 
-exit
+exit 0
 

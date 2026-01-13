@@ -8,6 +8,8 @@ function Edit-DefaultUserRegistry {
     reg load HKU\Def $defHive >$null
 
     try {
+		Set-ItemProperty -LiteralPath 'Registry::HKCU\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -Type 'DWord' -Value 0
+		
         reg add "HKU\Def\Software\Policies\Microsoft\Windows\WindowsCopilot" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f
         reg add "HKU\Def\Software\Policies\Microsoft\Windows\CloudContent"  /v DisableConsumerFeatures   /t REG_DWORD /d 1 /f
         reg add "HKU\Def\Software\Policies\Microsoft\Windows\Explorer"      /v DisableSearchBoxSuggestions /t REG_DWORD /d 1 /f
